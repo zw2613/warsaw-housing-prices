@@ -1,0 +1,1096 @@
+---
+title: "Zależność między ceną mieszkań a ich cechami na rynku nieruchomości w Warszawie"
+author: "Zuzanna Winiarska"
+output: html_document
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(stringr)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(rvest)
+library(tidyverse)
+library(viridis)
+library(hrbrthemes)
+library(GGally)
+library(fmsb)
+library(plotly)
+library(gganimate)
+library(magrittr)
+library(leaflet)
+library(sf)
+library(ggridges)
+library(kableExtra)
+library(gridExtra)
+library(ggh4x)
+```
+
+```{r, echo=F}
+OtoDom_Warszawa <- read.csv(file = "otodom.csv", header = T)
+OtoDom_Warszawa$Rok_budowy[OtoDom_Warszawa$Rok_budowy == 1056] <- 1956
+#view(OtoDom_Warszawa)
+```
+
+------------------------------------------------------------------------
+
+Rynek nieruchomości w Warszawie, pulsujący życiem i odzwierciedlający dynamiczny rozwój miasta, stanowi niezwykle interesujący obszar badawczy. W kontekście tego nieustannego ruchu oraz różnorodnych czynników wpływających na kształtowanie cen mieszkań, przedstawiam projekt, którego celem jest głęboka analiza zależności między cenami nieruchomości a ich różnorodnymi cechami. Poprzez analizę szerokiego zakresu danych, obejmujących istotne atrybuty nieruchomości, dążę do zidentyfikowania kluczowych czynników wpływających na kształtowanie cen, co może być cenną wskazówką dla inwestorów, deweloperów oraz przyszłych nabywców.
+
+#### **Kontekst rynku nieruchomości w Warszawie**
+
+Warszawa, będąca sercem Polski, to nie tylko stolica kraju, ale także centrum gospodarcze i kulturalne. Szybki rozwój miasta, innowacyjne projekty urbanistyczne oraz rosnące zapotrzebowanie na mieszkania sprawiają, że rynek nieruchomości w Warszawie jest miejscem o wyjątkowej dynamice i złożoności. Zmieniające się trendy, rozwój infrastruktury, a także czynniki społeczno-ekonomiczne, wpływają na ceny mieszkań, tworząc fascynujące pole badań.
+
+[![](otodom.webp){width="100%"}](https://www.otodom.pl/)
+
+### **Ramka danych**
+
+#### **Pochodzenie danych**
+
+Ramka danych użyta w projekcie pochodzi głównie z platformy ogłoszeniowej Otodom.pl, będącej jednym z głównych źródeł informacji o rynku nieruchomości w Warszawie. Zawiera informacje na temat blisko 7 000 ofert mieszkaniowych z terenu całej Warszawy. Dodatkowo, zbiór danych został wzbogacony przeze mnie o informacje geograficzne uzyskane z Google Maps, zawierające współrzędne geograficzne osiedli. Informacja o położeniu dzielnic względem Wisły została ręcznie dodana, dostarczając dodatkowego kontekstu przestrzennego.
+
+#### **Struktura ramki danych**
+
+Ramka danych jest tabelaryczną strukturą, gdzie każdy wiersz reprezentuje pojedyncze ogłoszenie dotyczące nieruchomości. Poszczególne kolumny zawierają różne informacje na temat każdej nieruchomości. Oto główne kategorie zmiennych:
+
+1.  **Podstawowe informacje o nieruchomości:**
+    -   **Nazwa ogłoszenia:** Unikalna nazwa identyfikująca ogłoszenie.
+    -   **Cena:** Cena nieruchomości wyrażona w zł.
+    -   **Cena za metr kwadratowy** Cena za jeden metr kwadratowy wyrażona w zł.
+    -   **Liczba pokoi:** Liczba pokoi w nieruchomości.
+    -   **Powierzchnia:** Powierzchnia nieruchomości w metrach kwadratowych.
+    -   **Piętro:** Piętro, na którym znajduje się nieruchomość.
+    -   **Balkon-taras-ogródek:** Informacja o obecności balkonu, tarasu lub ogródka.
+2.  **Lokalizacja:**
+    -   **Osiedle:** Nazwa osiedla, na którym znajduje się nieruchomość.
+    -   **Dzielnica:** Dzielnica Warszawy, w której zlokalizowana jest nieruchomość.
+    -   **Położenie względem Wisły:** Informacja o tym, czy nieruchomość znajduje się na lewym czy prawym brzegu Wisły.
+3.  **Dodatkowe Informacje:**
+    -   **Forma własności:** Forma prawna własności nieruchomości.
+    -   **Stan:** Stan techniczny nieruchomości.
+    -   **Czynsz:** Opłata miesięczna za utrzymanie nieruchomości.
+    -   **Miejsce parkinkowe:** Informacja o dostępności miejsca parkingowego.
+    -   **Ogrzewanie:** System ogrzewania nieruchomości.
+    -   **Rynek:** Informacja o tym, czy nieruchomość znajduje się na rynku pierwotnym czy wtórnym.
+    -   **Typ ogłoszeniodawcy:** Kategoria ogłoszeniodawcy (np. biuro nieruchomości, prywatny).
+    -   **Rok budowy:** Rok, w którym nieruchomość została wybudowana (oddana do użytku).
+    -   **Rodzaj zabudowy:** Informacja o rodzaju zabudowy nieruchomości (np. blok, apartamentowiec).
+    -   **Winda:** Informacja o obecności windy.
+
+#### **Typ danych**
+
+Ramka danych zawiera różnorodne typy danych, w tym:
+
+-   **Dane numeryczne:** Cena, Cena za metr, Liczba pokoi, Powierzchnia, Piętro, Czynsz, Rok budowy.
+-   **Dane kategoryczne:** Nazwa ogłoszenia, Osiedle, Dzielnica, Forma własności, Stan, Balkon-taras-ogródek, Miejsce parkinkowe, Ogrzewanie, Rynek, Typ ogłoszeniodawcy, Rodzaj zabudowy, Winda, Położenie względem Wisły.
+
+Warto zaznaczyć, że różnorodność typów danych pozwoli na bardziej kompleksową analizę i modelowanie, uwzględniając różne aspekty nieruchomości na warszawskim rynku.
+
+------------------------------------------------------------------------
+
+## **Etapy pracy**
+
+### **1. Pozyskanie danych**
+
+Pierwszym etapem pracy było pozyskiwanie informacji ze strony głównej, gdzie skoncentrowałam się na kluczowych danych ogólnych, takich jak lokalizacja, liczba pokoi, powierzchnia, cena itp. Dane te stanowiły pierwszy etap projektu, dostarczając podstawowego zestawu informacji o ofertach nieruchomości dostępnych na rynku warszawskim.
+
+Kolejnym etapem pozyskiwania danych było przeszukiwanie stron ofert nieruchomości wewnętrznych, bezpośrednio z linków do tych ofert. Dane dodatkowe, takie jak informacje o balkonach, miejscach parkingowych czy ogrzewaniu, były pobierane i zapisywane w wektorze. Jednak, w trakcie tego procesu, napotkałam na wyzwanie związane z brakiem jednolitej struktury informacji na poszczególnych stronach ofertowych.
+
+W celu efektywnego zarządzania tymi nieregularnościami, zdecydowałam się na przypisanie wartości NA dla wszystkich informacji dodatkowych na samym początku procesu pobierania danych. Podejście to wymagało dodatkowych kroków w procesie analizy danych, jednak zapewniło spójność w strukturze ramki danych, co było kluczowe dla późniejszych etapów projektu.
+
+Ponadto, skorzystałam z Google Maps, aby uzyskać współrzędne geograficzne osiedli, co pozwoliło mi na dodanie nowego wymiaru przestrzennego do moich danych. Ręczne dodanie informacji o położeniu dzielnic względem Wisły było kolejnym krokiem w uzupełnianiu ramki danych.
+
+### **2. Przygotowanie danych (czyszczenie)**
+
+W związku z różnorodnościami w strukturze pobranych danych, proces przygotowania danych stał się istotnym etapem. Wielokrotne wartości NA w ramce danych wynikały z faktu, że nie wszystkie informacje były dostępne na każdej stronie ofertowej. Dlatego też, dla każdej zmiennej, zastosowaliśmy warunek sprawdzający dostępność informacji przed jej przyporządkowaniem do danej kolumny. Ostatecznie, ta elastyczność w przyporządkowywaniu danych pozwoliła na stworzenie spójnej i pełnej ramki danych, jednocześnie respektując niestandardową strukturę danych pochodzących z różnych źródeł.
+
+Ten proces przygotowawczy był kluczowy dla utrzymania spójności danych i umożliwił późniejsze skuteczne modelowanie i analizę danych.
+
+------------------------------------------------------------------------
+
+#### **Fragment ramki**
+
+```{r, echo=FALSE, warning=FALSE}
+skrot <- OtoDom_Warszawa %>% 
+  select(Nazwa_ogłoszenia, Cena, Cena_za_metr, Liczba_pokoi, Powierzchnia, Osiedle, Dzielnica, Forma_własności) %>% 
+  slice(1:5)
+kable(skrot, "html") %>%
+  kable_styling()
+```
+
+### **3. Analiza danych za pomocą wizualizacji**
+
+W trzecim etapie analizy skoncentruję się na głębszym zrozumieniu informacji, korzystając z różnorodnych form wizualizacji. Wykorzystam narzędzia takie jak histogramy, wykresy słupkowe czy wykresy gęstości, aby ukazać różnorodność i rozkład danych.
+
+Podczas analizy każdego z tych wykresów, nie tylko opiszę ich charakterystyki, ale także wyciągnę wnioski, starając się zidentyfikować ukryte zależności czy charakterystyczne tendencje. W ten sposób zamierzam dostarczyć pełniejszy obraz informacji zawartych w ramce danych.
+
+Celem tego etapu jest nie tylko prezentacja danych w formie graficznej, ale także dostarczenie głębszego zrozumienia ich kontekstu. W ten sposób analiza wizualna stanie się narzędziem do odkrywania ukrytych wzorców i interpretowania danych w sposób bardziej kompleksowy.
+
+------------------------------------------------------------------------
+
+#### **Wykres zależności ilości ofert mieszkaniowych od dzielnicy Warszawy**
+
+Wykres zależności ilości ofert mieszkaniowych w zależności od dzielnicy Warszawy jest wizualizacją, która przedstawia liczbę dostępnych ofert w serwisie Otodom dla poszczególnych dzielnic tego miasta. Na osi X znajdują się nazwy dzielnic Warszawy, natomiast na osi Y ilość ofert mieszkaniowych w każdej z tych dzielnic. Wykres pozwala porównać, które dzielnice posiadają większą lub mniejszą dostępność ofert mieszkań, co może być przydatne przy analizie rynku nieruchomości w danym obszarze.
+
+```{r, echo=FALSE, warning=FALSE}
+ilosc_Dzielnica <- OtoDom_Warszawa %>% 
+  select(Dzielnica) %>% 
+  filter(!is.na(Dzielnica)) %>% 
+  group_by(Dzielnica) %>% 
+  summarise(Ilosc = n())
+
+# Wykres ilości mieszkań w zależności od dzielnicy
+ggplot(ilosc_Dzielnica, aes(x = Dzielnica, y = Ilosc, fill = Ilosc)) +
+  geom_col(color = "white", width = 0.5) + 
+  scale_fill_gradient(low = rainbow(length(unique(ilosc_Dzielnica$Ilosc))), high = "darkviolet") +
+  labs(title = "Ilość ofert w zależności od dzielnicy", x = "Dzielnica", y = "Ilość ofert") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+```
+
+##### **Wnioski**
+
+Analizując ilość ofert mieszkaniowych w poszczególnych dzielnicach Warszawy, możemy wyciągnąć kilka wniosków:
+
+1.  **Mokotów, Wola, Śródmieście:** Trzy najbardziej reprezentatywne dzielnice, z największą ilością ogłoszeń. Mokotów i Wola osiągają najwyższe wartości, co może sugerować dużą popularność tych lokalizacji.
+
+2.  **Białołęka, Praga-Południe:** Dzielnice z solidnym średnim poziomem ogłoszeń. Wskazuje to na zrównoważony popyt na nieruchomości w tych obszarach.
+
+3.  **Ursynów, Bielany, Żoliborz:** Stabilne, umiarkowane ilości ogłoszeń. Warto zauważyć, że Ursynów ma niższą ilość niż Mokotów czy Wola.
+
+4.  **Ochota, Praga-Północ, Włochy:** Dzielnice z niższym poziomem ogłoszeń, co może wynikać z różnic w atrakcyjności lokalizacyjnej.
+
+5.  **Pozostałe Dzielnice:** Dzielnice takie jak Rembertów, Targówek, czy Wawer wykazują niższe ilości ogłoszeń, co może świadczyć o mniejszym zainteresowaniu nieruchomościami w tych obszarach.
+
+Podsumowując, analiza wykresu słupkowego pozwala na zobaczenie rozkładu ogłoszeń w różnych dzielnicach Warszawy, co może być kluczowe przy podejmowaniu decyzji dotyczących lokalizacji nieruchomości.
+
+------------------------------------------------------------------------
+
+#### **Wykres zależności średniej ceny mieszkań od dzielnicy**
+
+Wykres zależności średniej ceny mieszkań ze względu na dzielnicę Warszawy przedstawia klarowny obraz rozkładu cenowego w różnych częściach miasta. Na osi X wymienione są poszczególne dzielnice, natomiast na osi Y znajduje się średnia cena mieszkania (w tysiącach złotych) w danej lokalizacji. Gradient kolorów od zielonego do czerwonego dodatkowo ułatwia zrozumienie rozkładu cenowego, prezentując zakres cen od najtańszych do najdroższych. Zielony kolor oznacza niższe ceny, natomiast czerwony - wyższe. Celem wykresu jest porównanie cen mieszkań między dzielnicami Warszawy, identyfikacja atrakcyjnych cenowo obszarów oraz zrozumienie zróżnicowania rynku nieruchomości w mieście.
+
+```{r, echo=FALSE, warning=FALSE}
+cena_Dzielnica <- OtoDom_Warszawa %>%
+  select(Dzielnica, Cena) %>% 
+  filter(!is.na(Dzielnica)) %>% 
+  group_by(Dzielnica) %>%
+  summarise(Avg_Price = mean(Cena)/1000)
+
+ggplot(cena_Dzielnica, aes(x = Dzielnica, y = Avg_Price, fill = Avg_Price)) +
+  geom_col(color = "white", width = 0.5) + 
+  scale_fill_gradient(low = "green", high = "red") +
+  labs(title = "Cena mieszkań w zależności od dzielnicy", x = "Dzielnica", y = "Cena w tys.", fill = "Średnia cena") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+```
+
+##### **Wnioski**
+
+Na podstawie przedstawionych danych dotyczących średnich cen mieszkań w poszczególnych dzielnicach Warszawy możemy wyróżnić kilka wniosków:
+
+1.  **Zróżnicowanie Atrakcyjności Lokalizacyjnej:**
+    -   Dzielnice centralne, takie jak Śródmieście, prezentują najwyższe ceny mieszkań, co wynika z dogodnego położenia i dostępu do szerokiej gamy usług.
+    -   Mokotów, Wola, i Wilanów również odznaczają się wyższymi cenami, co jest efektem atrakcyjnej lokalizacji i wysokiego standardu życia.
+2.  **Warunki dla Inwestorów i Poszukujących Oszczędności:**
+    -   Dzielnice z niższymi średnimi cenami, takie jak Rembertów czy Białołęka, mogą być atrakcyjne dla inwestorów szukających potencjalnych wzrostów wartości nieruchomości.
+    -   Osoby poszukujące bardziej przystępnych cen mogą znaleźć okazje do zakupu mieszkań w obszarach, gdzie ceny są relatywnie niższe.
+3.  **Zróżnicowanie Oferowanych Standardów Życia:**
+    -   Wyższe ceny w dzielnicach centralnych mogą być odzwierciedleniem dostępu do ekskluzywnych usług, kulturalnych atrakcji i biznesowych centrów.
+    -   Dla tych, dla których koszty są kluczowym czynnikiem, dzielnice z niższymi cenami oferują równie atrakcyjne możliwości zakupu, choć zazwyczaj w mniej zurbanizowanych obszarach.
+4.  **Wpływ Infrastruktury na Ceny:**
+    -   Dostępność do rozwiniętej infrastruktury, takiej jak komunikacja publiczna, sklepy, i tereny rekreacyjne, może wpływać na wyższe ceny nieruchomości.
+
+Podsumowując, analiza danych cen mieszkań w Warszawie pozwala na bardziej kompleksową ocenę rynku nieruchomości, z uwzględnieniem różnorodnych aspektów, takich jak lokalizacja, standard życia, oraz potencjał inwestycyjny.
+
+------------------------------------------------------------------------
+
+#### **Wykres zależności ceny mieszkań od powierzchni w metrach kwadratowych**
+
+Wykresy zależności ceny mieszkań od powierzchni dostarczają istotnych informacji dotyczących wpływu rozmiaru nieruchomości na jej cenę. Dane przedstawione są na dwóch wykresach, prezentujących średnie ceny mieszkań dla dwóch przedziałów powierzchniowych: do 200 m² oraz powyżej 200 m². W obu wykresach na na osi X znajdują się przedziały powierzchni, podzielone na kategorie, natomiast na osi Y umieszczona jest średnia cena mieszkania dla danego przedziału powierzchni. Wykorzystano punkty na końcach słupków, by ułatwić odczytanie średnich cen mieszkań dla konkretnych przedziałów powierzchni.
+
+```{r, echo=FALSE, warning=FALSE}
+breaks_0 <- c(0, seq(20, 200, 10))
+Labels_0 <- c("<=20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80", "81-90", "91-100", "101-110", "111-120", "121-130", "131-140", "141-150", "151-160", "161-170", "171-180", "181-190", "191-200")
+
+pow_0 <- OtoDom_Warszawa %>%
+  select(Powierzchnia, Cena) %>% 
+  filter(!is.na(Powierzchnia)) %>% 
+  mutate(Powierzchnia_lvl = cut(Powierzchnia, breaks_0, labels = Labels_0, echo.lowest = TRUE), .groups = "drop")
+
+Avg_Price <- pow_0 %>%
+  filter(!is.na(Powierzchnia_lvl)) %>% 
+  group_by(Powierzchnia_lvl) %>%
+  summarise(Avg_Price = mean(Cena, na.rm = TRUE)/1000000)
+
+p1 <- ggplot(Avg_Price, aes(x=Powierzchnia_lvl, y=Avg_Price)) +
+  geom_segment( aes(x=Powierzchnia_lvl, xend=Powierzchnia_lvl, y=0, yend=Avg_Price), color="darkgrey") +
+  geom_point( color="pink", size=4) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  labs(title = "Cena mieszkań w zależności od powierzchni w m² dla mieszkań do 200 m²", x = "Powierzchnia w m²", y = "Średnia cena") +
+  xlab("Powierzchnia w m²") +
+  ylab("Średnia cena w mln") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+breaks_200 <- c(seq(200, 460, 10))
+
+Labels_200 <- c("201-210", "211-220", "221-230", "231-240", "241-250", "251-260", "261-270", "271-280", "281-290", "291-300","301-310", "311-320", "321-330", "331-340", "341-350", "351-360", "361-370", "371-380", "381-390", "391-400","401-410", "411-420", "421-430", "431-440", "441-450", ">450")
+
+pow_2 <- OtoDom_Warszawa %>%
+  select(Powierzchnia, Cena) %>% 
+  filter(!is.na(Powierzchnia)) %>% 
+  mutate(Powierzchnia_lvl = cut(Powierzchnia, breaks_200, labels = Labels_200, echo.lowest = TRUE), .groups = "drop")
+
+Avg_Price <- pow_2 %>%
+  filter(!is.na(Powierzchnia_lvl)) %>% 
+  group_by(Powierzchnia_lvl) %>%
+  summarise(Avg_Price = mean(Cena, na.rm = TRUE)/1000000)
+
+p2 <- ggplot(Avg_Price, aes(x=Powierzchnia_lvl, y=Avg_Price)) +
+  geom_segment( aes(x=Powierzchnia_lvl, xend=Powierzchnia_lvl, y=0, yend=Avg_Price), color="darkgrey") +
+  geom_point( color="navy", size=4) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  labs(title = "Cena mieszkań w zależności od powierzchni w m² dla mieszkań powyżej 200 m²", x = "Powierzchnia w m²", y = "Średnia cena") +
+  xlab("Powierzchnia w m²") +
+  ylab("Średnia cena w mln") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+grid.arrange(p1, p2, nrow = 2)
+```
+
+##### **Wnioski**
+
+**Dla Mieszkań do 200 m²:**
+
+-   Ceny rosną proporcjonalnie do powierzchni: Wraz ze wzrostem powierzchni mieszkania, można zauważyć wzrost średniej ceny.
+
+-   Najbardziej zauważalny wzrost występuje w przedziałach powierzchni 101-110 m², 141-150 m², oraz 161-170 m².
+
+-   Warto zauważyć, że cena za metr kwadratowy maleje w miarę zwiększania się powierzchni.
+
+**Dla Mieszkań powyżej 200 m²**
+
+-   Wartości cen dla tych mieszkań są znacznie wyższe niż dla mniejszych mieszkań, co jest zgodne z oczekiwaniami.
+
+-   Cena za metr kwadratowy waha się, ale w ogólności utrzymuje się na wyższym poziomie niż dla mieszkań o mniejszej powierzchni.
+
+##### **Interpetacje**
+
+1\. **Cena a Metraż**
+
+-   Wyraźnie widać, że cena mieszkania rośnie proporcjonalnie do jego powierzchni, zarówno dla mieszkań do 200 m², jak i powyżej 200 m².
+-   Niższa cena za metr kwadratowy dla większych mieszkań może sugerować, że w przypadku większych nieruchomości inwestorzy są skłonni do negocjacji cenowej.
+-   **Wpływ Powierzchni na Wartość Nieruchomości:**
+
+<!-- -->
+
+-   Mieszkania o powierzchni od 101 m² do 170 m² prezentują się jako obszar, gdzie inwestycja może być szczególnie atrakcyjna z uwagi na stosunkowo niską cenę za metr kwadratowy i umiarkowany rozmiar.
+
+3.  **Segmentacja Rynku Powyżej 200 m²:**
+
+-   Dla mieszkań powyżej 200 m² widoczne są większe wahania cenowe, co może wynikać z różnic w standardzie wykończenia, lokalizacji czy dodatkowych udogodnień.
+
+Analiza ta pozwala na lepsze zrozumienie, jak powierzchnia mieszkania wpływa na jego cenę oraz jakie trendy można zaobserwować na rynku nieruchomości w zależności od tego parametru.
+
+------------------------------------------------------------------------
+
+#### **Liczba ofert w zależności od roku budowy**
+
+Histogram przedstawiający liczbę ofert mieszkań w zależności od roku budowy nieruchomości stanowi ciekawą wizualizację dynamiki rynku nieruchomości w Warszawie. Na osi OX znajdują się lata budowy, a na osi OY liczba ofert mieszkań w danym roku.
+
+```{r, echo=FALSE, warning=FALSE}
+rok_oferty <- OtoDom_Warszawa %>% 
+  select(Rok_budowy) %>% 
+  filter(!is.na(Rok_budowy)) %>% 
+  filter(Rok_budowy > 1500) 
+
+pomoc <- rok_oferty %>% 
+  group_by(Rok_budowy) %>% 
+  mutate(Liczba_ofert = n()) %>% 
+  select(Rok_budowy, Liczba_ofert) %>% 
+  distinct()
+#view(pomoc)
+
+ggplot(rok_oferty, aes(x = Rok_budowy)) +
+  geom_histogram(binwidth = 5, fill = "pink", color = "black", alpha = 0.7) +
+  labs(title = "Rozkład lat budowy",
+       x = "Rok budowy",
+       y = "Liczba ogłoszeń")+
+  theme_minimal()+
+  scale_x_continuous(breaks = c(seq(min(rok_oferty$Rok_budowy), 1900, by=50), seq(1900, max(rok_oferty$Rok_budowy), by = 25)))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+```
+
+##### **Podsumowanie**
+
+1.  **Wzrost aktywności w nowoczesnych inwestycjach:** - Lata po 2000 roku prezentują znaczny wzrost liczby ofert, co jest zgodne z intensywnym rozwojem nowych inwestycji i budową nowoczesnych mieszkań.
+2.  **Stabilna aktywność w okresie 1960-1990:**
+    -   Okres od lat 60. do lat 90. charakteryzuje się stabilnym, choć umiarkowanym, poziomem aktywności. To prawdopodobnie związane z rozbudową miast w okresie powojennym i rozwinięciem bloków mieszkalnych.
+3.  **Różnorodność ofert na działkach o historii urbanistycznej:**
+    -   Obecność ofert z okresu przedwojennego, pomimo zniszczenia Warszawy w czasie II wojny światowej, wskazuje na dostępność nieruchomości zlokalizowanych na terenach o historii urbanistycznej. Owa różnorodność może być efektem odbudowy i rekonstrukcji.
+4.  **Rzadkie oferty z końca XIX i początku XX wieku:**
+    -   Pomimo sporadycznych ofert, istnieją nieruchomości zbudowane pod koniec XIX i na początku XX wieku, co stanowi klasyczną i historyczną ofertę na rynku.
+
+##### **Wnioski i interpretacje**
+
+-   Rynkowa aktywność w budownictwie mieszkalnym zaznacza się dynamicznym rozwojem od 2000 roku.
+
+-   Pomimo zniszczeń wojennych, obecność ofert z okresu przedwojennego sugeruje istnienie zrewitalizowanych i zrekonstruowanych nieruchomości, co stanowi unikatową ofertę na rynku.
+
+-   Stabilna liczba ofert w okresie 1960-1990 może wskazywać na kontynuację zainteresowania mieszkaniami w blokach mieszkalnych z tego okresu.
+
+-   Różnorodność ofert z różnych okresów umożliwia klientom wybór spośród nieruchomości o różnych charakterystykach historycznych i architektonicznych, tworząc zróżnicowany rynek nieruchomości w Warszawie. Obecność nowoczesnych mieszkań podkreśla aktualne trendy i oczekiwania klientów w dziedzinie nieruchomości.
+
+------------------------------------------------------------------------
+
+#### **Cena z podziałem na rodzaj zabudowy w zależności od roku budowy**
+
+Animowany wykres przedstawia trend cen mieszkań w Warszawie w zależności od rodzaju zabudowy oraz roku ich budowy. Oś X reprezentuje lata budowy, natomiast oś Y przedstawia cenę mieszkania w milionach złotych. Każda linia na wykresie reprezentuje inny rodzaj zabudowy, a punkty na linii są rozmieszczone wzdłuż osi X zgodnie z rokiem budowy mieszkania.
+
+```{r, echo=F, warning=FALSE, message=FALSE}
+zabudowa_rok_cena <- OtoDom_Warszawa %>% 
+  select(Rodzaj_zabudowy, Rok_budowy, Cena) %>% 
+  filter(!is.na(Rodzaj_zabudowy)) %>%
+  filter(!is.na(Rok_budowy)) %>%
+  filter(Rok_budowy > 1800)
+
+animacja <- zabudowa_rok_cena %>%
+  ggplot(aes(x = Rok_budowy, y = Cena/1000000, group = Rodzaj_zabudowy, color = factor(Rodzaj_zabudowy))) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values = viridis::viridis_pal()(length(unique(zabudowa_rok_cena$Rodzaj_zabudowy)))) +
+  ggtitle("Cena mieszkania w zależności od rodzaju zabudowy oraz roku budowy") +
+  theme_minimal() +
+  ylab("Cena w mln") +
+  xlab("Rok budowy") +
+  transition_reveal(Rok_budowy) +
+  guides(color = guide_legend(title = "Rodzaj zabudowy")) +
+  scale_y_continuous(breaks = seq(0, 6, by = 1)) +
+  coord_cartesian(ylim = c(0, 6))+
+  theme(axis.text.x = element_text(angle = 0, hjust = 1),
+        plot.title = element_text(hjust = 0.5, size = 10))
+
+#anim_save("zabudowa_rok_cena.gif", animation = animacja)
+animacja
+```
+
+##### **Wnioski**
+
+1.  **Wzrost cen z czasem:** Ogólnie można zauważyć tendencję wzrostową cen mieszkań w Warszawie w ostatnich latach, bez względu na rodzaj zabudowy.
+2.  **Różnice między rodzajami zabudowy:** Wykres uwydatnia różnice w cenach między różnymi rodzajami zabudowy. Apartamentowce mogą charakteryzować się wyższymi cenami niż bloki czy kamienice.
+3.  **Wpływ roku budowy:** Starsze nieruchomości mogą wykazywać niższe ceny, ale istnieją wyjątki, zwłaszcza w przypadku nowoczesnych apartamentowców.
+4.  **Ciągła zmienność cen:** Linie na wykresie pozwalają zauważyć niestabilność cen w zależności od roku budowy, co może wynikać z różnych czynników rynkowych.
+
+##### **Interpretacje**
+
+1.  **Rok budowy istotny dla ceny:** Wybór nieruchomości zależny jest od preferencji i budżetu kupującego. Starsze budynki mogą być bardziej atrakcyjne cenowo, ale nowoczesne oferty zazwyczaj charakteryzują się wyższymi cenami.
+2.  **Różnice między rodzajami zabudowy:** Wybór między apartamentowcami, blokami a kamienicami może wpływać na cenę nieruchomości. Lokalizacja, standard i dodatkowe udogodnienia mogą również wpływać na wartość mieszkania.
+3.  **Trendy rynkowe:** Dynamika zmian cen mieszkań odzwierciedla trendy rynkowe i popyt na konkretne rodzaje zabudowy w różnych okresach czasu.
+
+Animowany charakter wykresu pozwala śledzić zmiany cen w czasie, co może być szczególnie przydatne do analizy długoterminowych trendów na rynku nieruchomości.
+
+------------------------------------------------------------------------
+
+#### **Cena za metr w zależności od osiedla - najdroższe osiedla w dzielnicach**
+
+Wykres przedstawia średnie ceny za metr kwadratowy mieszkań w najdroższych osiedlach poszczególnych dzielnic Warszawy. Na osi X znajdują się nazwy osiedli, natomiast na osi Y cena za metr kwadratowy w polskich złotych. Wykres pozwala porównać, które osiedla są najbardziej ekskluzywne i charakteryzują się wyższymi cenami za metr kwadratowy.
+
+```{r, warning=F, echo=F}
+cena_metr_max_osiedle <- OtoDom_Warszawa %>%
+  select(Cena_za_metr, Osiedle, Dzielnica) %>% 
+  filter(!is.na(Osiedle)) %>% 
+  group_by(Osiedle) %>%
+  mutate(Średnia_cena_za_metr = mean(Cena_za_metr)) %>% 
+  ungroup() %>% 
+  group_by(Dzielnica) %>% 
+  slice(which.max(Średnia_cena_za_metr))
+#view(cena_metr_max_osiedle)
+
+cena_metr_max_osiedle <- cena_metr_max_osiedle %>%
+  arrange(Dzielnica, Osiedle)
+
+ggplot(cena_metr_max_osiedle, aes(x = Osiedle, y = Średnia_cena_za_metr/1000, fill = Dzielnica, label = Dzielnica)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  ggtitle("Średnia cena za metr od osiedla - najdroższe osiedla w dzielnicach") +
+  xlab("Osiedle") +
+  ylab("Cena za metr w tys.") +
+  theme_minimal() +
+  guides(fill = "none") +  # Usunięcie legendy
+  geom_text(position = position_dodge(width = 1), vjust = -0.5, size = 2) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, size = 15))
+```
+
+##### **Wnioski**
+
+1.  **Zróżnicowane ceny wśród najdroższych osiedli:** Wykres uwydatnia znaczne zróżnicowanie cen za metr kwadratowy nawet wśród najbardziej prestiżowych osiedli różnych dzielnic. Wskazuje to na istotność lokalizacji osiedla dla kształtowania cen nieruchomości.
+2.  **Najwyższe ceny w centralnych lokalizacjach:** Dzielnicą, w której występują najwyższe ceny za metr, jest Śródmieście Północne. Również osiedla takie jak "Powązki" w dzielnicy Wola czy "Ksawerów" w dzielnicy Mokotów prezentują wysokie średnie ceny za metr kwadratowy. To potwierdza tendencję do wyższych cen w centralnych i prestiżowych częściach miasta.
+
+##### **Interpretacje**
+
+1.  **Lokalizacja jako kluczowy czynnik cenowy:** Analiza wykresu wskazuje, że lokalizacja osiedla jest kluczowym czynnikiem wpływającym na cenę za metr kwadratowy. Dostęp do atrakcji, infrastruktury czy prestiżu danej dzielnicy istotnie wpływa na wartość nieruchomości.
+2.  **Wybór osiedla a preferencje nabywców:** Dla potencjalnych nabywców jest to istotna informacja, umożliwiająca lepsze dopasowanie ofert do własnych preferencji. Osoby poszukujące mieszkań w konkretnych dzielnicach mogą dodatkowo uwzględniać zróżnicowanie cenowe między osiedlami.
+
+Wykres stanowi użyteczne narzędzie do zrozumienia zróżnicowania cenowego w obrębie poszczególnych dzielnic Warszawy. Analiza może wspierać proces podejmowania decyzji zakupowej, umożliwiając bardziej precyzyjny wybór nieruchomości z uwzględnieniem lokalizacyjnych preferencji i dostępnych budżetów.
+
+------------------------------------------------------------------------
+
+#### **Zależność średniej ceny za metr kwadratowy od osiedla na interaktywnej mapie Warszawy**
+
+Interaktywna mapa Warszawy przedstawiająca zależność średniej ceny za metr kwadratowy od osiedla. Na mapie umieszczone są interaktywne kropki, gdzie każda kropka reprezentuje jedno osiedle. Im większa kropka, tym wyższa średnia cena za metr kwadratowy na danym osiedlu. Przez najechanie myszką na kropkę można uzyskać informacje dotyczące dzielnicy, osiedla oraz średniej ceny za metr kwadratowy.
+
+```{r, echo=F, warning=FALSE}
+osiedla <- sort(unique(OtoDom_Warszawa$Osiedle))
+# Ramka danych z osiedlami i współrzędnymi
+wspolrzedne_osiedla <- data.frame(
+  Osiedle = c(
+    "Anin", "Augustówka", "Bemowo-Lotnisko", "Białołęka Dworska", "Błonia Wilanowskie", "Boernerowo", "Bródno-Podgrodzie", "Chomiczówka", "Chrzanów", "Czechowice", "Czerniaków", "Czyste",  "Dąbrówka Szlachecka","Elsnerów", "Falenica", "Filtry", "Fort Bema", "Fort Radiowo", "Gocław", "Gocławek", "Gołąbki", "Górce","Grabów", "Grochów", "Grodzisk", "Groszówka", "Groty", "Henryków", "Huta",  "Jelonki Północne","Jeziorki Południowe", "Jeziorki Północne", "Kabaty", "Kamionek", "Kawęczyn-Wygoda","Kobiałka", "Koło", "Ksawerów", "Las", "Las Bielański", "Las Kabacki", "Marymont-Kaskada","Marymont-Potok", "Marymont-Ruda","Marysin Wawerski", "Miedzeszyn", "Międzylesie", "Mirów", "Młociny", "Młynów", "Natolin", "Niedźwiadek", "Nowa Praga", "Nowe Miasto", "Nowe Włochy", "Nowodwory", "Nowolipki", "Nowy Rembertów", "Odolany", "Okęcie", "Olszynka Grochowska", "Opacz Wielka", "Pelcowizna", "Piaski", "Powązki", "Powiśle", "Powsin", "Powsinek", "Pyry", "Radiowo", "Rakowiec", "Raków", "Sadul", "Sady Żoliborskie", "Sadyba", "Salomea", "Saska Kępa", "Siekierki", "Sielce", "Skorosze", "Słodowiec", "Służew", "Służewiec", "Solec", "Stara Miłosna", "Stara Ochota", "Stara Praga", "Stare Bielany", "Stare Miasto", "Stary Imielin", "Stary Mokotów", "Stary Rembertów", "Stary Służew", "Stary Żoliborz", "Stegny", "Szamoty", "Szczęśliwice", "Szmulowizna", "Śródmieście Południowe","Śródmieście Północne", "Tarchomin", "Targówek Fabryczny", "Targówek Mieszkaniowy",  "Ujazdów", "Ulrychów", "Ursynów-Centrum", "Ursynów Północny", "Wawer", "Wawrzyszew", "Wierzbno", "Wilanów Królewski", "Wilanów Wysoki", "Wólka Węglowa", "Wrzeciono", "Wyględów", "Zacisze", "Zawady", "Zerzeń", "Zielona-Grzybowa", "Żerań"
+    ),
+  Szerokosc_Geograficzna = c(
+    52.219894, 52.195320, 52.258038, 52.340362, 52.151633, 52.263037, 52.299581, 52.275470, 52.223189, 52.187899, 52.204112, 52.227818, 52.345756, 52.276471, 52.160408, 52.218175, 52.258962, 52.255607, 52.224979, 52.236988, 52.201391, 52.242986, 52.142393, 52.239335, 52.327355, 52.229151, 52.249529, 52.330605, 52.295734, 52.234276, 52.113230, 52.132502, 52.129799, 52.246287, 52.260197, 52.350974, 52.245745, 52.184416, 52.216817, 52.294495, 52.119915, 52.279230, 52.278581, 52.285859, 52.239812, 52.169965, 52.204147, 52.232656, 52.312112, 52.239170, 52.139380, 52.194398, 52.259809, 52.254595, 52.208204, 52.338545, 52.243921, 52.251108, 52.218647, 52.180508, 52.245826, 52.178269, 52.278283, 52.268549, 52.250315, 52.241623, 52.128875, 52.148913, 52.130422, 52.285368, 52.203117, 52.195161, 52.210517, 52.262588, 52.186094, 52.191257, 52.228806, 52.211208, 52.200068, 52.191882, 52.271934, 52.172292, 52.179949, 52.228994, 52.213359, 52.216760, 52.248637, 52.281039, 52.249500, 52.145661, 52.204885, 52.258375, 52.163313, 52.266061, 52.181101, 52.203361, 52.208558, 52.257683, 52.221989, 52.238172, 52.319810, 52.264926, 52.272643, 52.215845, 52.230886, 52.150199, 52.159321, 52.192322, 52.283825, 52.192853, 52.168531, 52.172367, 52.300011, 52.291090, 52.197254, 52.283174, 52.169157, 52.185516, 52.247214, 52.305398
+  ),
+  Dlugosc_Geograficzna = c(
+    21.178564, 21.087489, 20.917685, 20.999132, 21.076218, 20.900057, 21.063092, 20.921745, 20.886313, 20.878932, 21.056940, 20.971038, 20.956517, 21.090108, 21.212762, 20.997314, 20.938045, 20.892176, 21.092470, 21.126601, 20.862973, 20.910844, 21.008986, 21.086927, 21.066047, 21.229999, 20.880573, 20.976907, 20.920508, 20.910733, 20.999201, 20.998735, 21.067346, 21.056500, 21.121793, 21.053964, 20.944642, 21.017249, 21.112943, 20.958158, 21.051119, 20.967547, 20.990313, 20.981236, 21.146968, 21.195046, 21.185402, 20.991305, 20.919908, 20.967538, 21.052859, 20.867446, 21.029805, 21.006025, 20.903516, 20.939469, 20.983884, 21.161212, 20.938892, 20.971052, 21.123013, 20.923701, 21.012790, 20.946057, 20.972549, 21.025802, 21.112066, 21.104521, 21.017965, 20.890942, 20.977385, 20.946281, 21.150928, 20.964885, 21.060701, 20.925945, 21.060666, 21.073000, 21.039976, 20.900523, 20.955264, 21.018315, 20.994079, 21.037005, 21.231461, 20.978296, 21.034956, 20.948020, 21.012974, 21.025144, 21.014206, 21.160579, 21.043893, 20.989508, 21.043726, 20.882681, 20.956543, 21.052400, 21.015174, 21.007983, 20.955948, 21.076047, 21.050668, 21.038356, 20.936824, 21.048101, 21.022102, 21.169499, 20.931551, 21.014624, 21.092633, 21.069690, 20.887611, 20.940102, 20.992352, 21.072984, 21.118015, 21.143592, 21.199932, 20.995807
+  )
+)
+
+osiedla_map1 <- merge(OtoDom_Warszawa, wspolrzedne_osiedla, by = "Osiedle", all.x = TRUE)
+#view(osiedla_map)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+osiedla_map <- osiedla_map1 %>%
+  select(Dzielnica, Osiedle, Cena_za_metr, Szerokosc_Geograficzna, Dlugosc_Geograficzna) %>% 
+  filter(!is.na(Szerokosc_Geograficzna) & !is.na(Dlugosc_Geograficzna)) %>%
+  group_by(Osiedle) %>%
+  mutate(Średnia_cena_za_metr = round(mean(Cena_za_metr)), 2)
+osiedla_map <- osiedla_map %>% 
+  select(Dzielnica, Osiedle, Średnia_cena_za_metr, Szerokosc_Geograficzna, Dlugosc_Geograficzna)
+
+mybins <- seq(min(osiedla_map$Średnia_cena_za_metr), max(osiedla_map$Średnia_cena_za_metr), length.out = 7)
+mypalette <- colorBin(palette = "YlOrRd", domain = osiedla_map$Średnia_cena_za_metr, bins = mybins)
+
+osiedla_map$Cena_factor <- cut(osiedla_map$Średnia_cena_za_metr, breaks = mybins, labels = FALSE)
+circle_colors <- colorNumeric(palette = "YlOrRd", domain = osiedla_map$Cena_factor)
+
+mytext <- paste(
+  "Dzielnica: ", osiedla_map$Dzielnica, "<br/>",
+  "Osiedle: ", osiedla_map$Osiedle, "<br/>",
+  "Średnia cena za metr kwadratowy: ", osiedla_map$Średnia_cena_za_metr, " PLN", sep = ""
+) %>% lapply(htmltools::HTML)
+
+pomoc1 <- osiedla_map %>% 
+  group_by(Osiedle) %>% 
+  distinct()
+#view(pomoc1)
+
+mapa <- leaflet(osiedla_map) %>%
+  addTiles() %>%
+  setView(lng = 21.0, lat = 52.25, zoom = 11) %>%
+  addCircleMarkers(
+    ~Dlugosc_Geograficzna, ~Szerokosc_Geograficzna,
+    fillColor = ~circle_colors(osiedla_map$Cena_factor),
+    fillOpacity = 0.7,
+    color = ~circle_colors(osiedla_map$Cena_factor),  
+    radius = osiedla_map$Cena_factor * 3, 
+    stroke = FALSE,
+    label = mytext,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addLegend(
+    pal = mypalette,
+    values = ~Średnia_cena_za_metr,
+    opacity = 0.9,
+    title = "Średnia cena za metr kwadratowy (PLN)",
+    position = "bottomright"
+  )
+mapa
+```
+
+##### **Wnioski**
+
+1.  **Najwyższe ceny na południu Mokotowa:** Obszar ten prezentuje najwyższe średnie ceny za metr kwadratowy, zwłaszcza osiedla "Sielce," "Czerniaków," i "Wierzbno."
+2.  **Różnorodność cen w różnych dzielnicach:** Widoczna jest duża rozbieżność cen w różnych dzielnicach. Przykładowo, Wola i Śródmieście prezentują zarówno wysokie, jak i niskie ceny.
+3.  **Ekskluzywne osiedla w różnych częściach miasta:** Nie tylko centrum Warszawy ma ekskluzywne osiedla; również na obrzeżach, na przykład w Wilanowie czy Ursynowie, można znaleźć osiedla z wysokimi cenami za metr kwadratowy.
+
+##### **Interpretacje**
+
+1.  **Mokotów jako obszar ekskluzywny:** Dzielnica Mokotów wyróżnia się jako obszar o najwyższych cenach za metr kwadratowy. Osiedla takie jak "Sielce" czy "Wierzbno" przyciągają nabywców ze względu na prestiżową lokalizację.
+2.  **Różnorodność ofert w dzielnicach centralnych:** W dzielnicach takich jak Wola czy Śródmieście można znaleźć zarówno osiedla z niższymi, jak i wyższymi cenami za metr kwadratowy, co daje różnorodność ofert dostosowanych do różnych budżetów.
+3.  **Popyt na ekskluzywne lokale na obrzeżach:** Osiedla na obrzeżach miasta, takie jak Wilanów czy Ursynów, również prezentują wysokie ceny za metr kwadratowy, co sugeruje, że popyt na ekskluzywne lokale obejmuje różne części Warszawy.
+
+------------------------------------------------------------------------
+
+#### **Średnia wysokość czynszu w zależności od dzielnicy z podziałem na położenie względem Wisły**
+
+##### **Warszawa lewobrzeżna**
+
+Wykres gęstości przedstawia rozkład średnich czynszów w poszczególnych osiedlach Warszawy lewobrzeżnej, z podziałem na dzielnice. Oś X ukazuje średni czynsz, natomiast oś Y prezentuje gęstość rozkładu, odzwierciedlając różne wartości średnich czynszów w poszczególnych obszarach.
+
+```{r, echo=FALSE}
+polozenie_wisla <- data.frame(
+  Dzielnica = c(
+    "Bemowo", "Białołęka", "Bielany", "Mokotów", "Ochota", "Praga-Południe", "Praga-Północ", "Rembertów", "Śródmieście", "Targówek", "Ursus", "Ursynów", "Wawer", "Wesoła", "Wilanów", "Włochy", "Wola", "Żoliborz"   
+  ),
+  Polozenie_wzgledem_Wisly = c(
+    "lewobrzeżna", "prawobrzeżna", "lewobrzeżna", "lewobrzeżna", "lewobrzeżna", "prawobrzeżna", "prawobrzeżna", "prawobrzeżna", "lewobrzeżna", "prawobrzeżna", "lewobrzeżna", "lewobrzeżna", "prawobrzeżna", "prawobrzeżna", "lewobrzeżna", "lewobrzeżna", "lewobrzeżna", "lewobrzeżna" 
+  )
+)
+czynsz_dzielnica <- left_join(OtoDom_Warszawa, polozenie_wisla, by = "Dzielnica")
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+czynsz_dzielnica_l <- czynsz_dzielnica %>%
+  select(Dzielnica, Osiedle, Czynsz, Polozenie_wzgledem_Wisly) %>%
+  filter(!is.na(Dzielnica)) %>%
+  filter(!is.na(Czynsz)) %>%
+  group_by(Dzielnica, Osiedle) %>%
+  mutate(
+    Dzielnica = factor(Dzielnica),
+    Czynsz = as.numeric(str_extract(str_replace_all(Czynsz, "\\s", ""), "\\d+"))
+  ) %>%
+  filter(Polozenie_wzgledem_Wisly == "lewobrzeżna") %>%
+  filter(Czynsz < 2300) %>%
+  filter(Czynsz > 100) %>%
+  group_by(Dzielnica, Osiedle) %>%
+  summarize(mean_czynsz = mean(Czynsz, na.rm = TRUE))
+#view(czynsz_dzielnica_l)
+
+# Znajdź maksymalną wartość Czynsz
+max_czynsz <- max(czynsz_dzielnica_l$mean_czynsz)
+
+# Stworzenie mapy z użyciem geom_density_ridges
+ggplot(czynsz_dzielnica_l, aes(x = mean_czynsz, y = Dzielnica, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01, message = FALSE) +
+  scale_fill_viridis(name = "Średni Czynsz w zł", option = "C", aesthetics = "fill") +
+  labs(title = 'Wykres średniego czynszu w zależności od dzielnicy') +
+  theme_minimal() +
+  xlab("Średni czynsz w zł")+
+  theme(
+    legend.position = "right",
+    panel.spacing = unit(0.5, "lines"),  # Zwiększenie odległości między mini-wykresami
+    strip.text.x = element_text(size = 8),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 15)
+  ) +
+  scale_x_continuous(limits = c(0, max_czynsz), breaks = seq(0, max_czynsz, by = 100), labels = scales::comma)
+
+```
+
+##### **Wnioski**
+
+1.  **Różnorodność cen w obrębie dzielnic:** W dzielnicach takich jak Wilanów czy Ursynów-Centrum, obserwujemy zróżnicowane średnie czynsze, co może wynikać z lokalnych uwarunkowań, takich jak prestiż osiedli czy dostęp do dodatkowych udogodnień.
+2.  **Ceny a centralna lokalizacja:** Obszary Śródmieścia prezentują zróżnicowanie cen, odzwierciedlając różnice między ekskluzywnymi obszarami a bardziej dostępnymi pod względem cenowym.
+3.  **Zróżnicowanie cen w dzielnicach o niższych standardach:** Dzielnie takie jak Bemowo czy Bielany również prezentują zróżnicowanie cen, co może być rezultatem lokalizacji konkretnych osiedli w obrębie tych dzielnic. Osiedla blisko centrów handlowych czy z dogodnym dostępem do komunikacji publicznej mogą cechować się wyższymi czynszami.
+
+##### **Interpretacje**
+
+1.  **Ekskluzywne osiedla z wyższymi czynszami:** Warto zauważyć, że osiedla w dzielnicach takich jak Wilanów czy Ursynów-Centrum prezentują wyższe średnie czynsze, co może wynikać z ekskluzywności tych obszarów oraz dostępu do dodatkowych udogodnień.
+2.  **Zróżnicowanie centralnych obszarów:** Śródmieście prezentuje zróżnicowane średnie czynsze, co może wynikać z faktu, że obejmuje zarówno obszary prestiżowe, jak i te mniej ekskluzywne, co wpływa na zróżnicowanie cen w całej dzielnicy.
+3.  **Lokalne czynniki wpływające na ceny:** Dzielnice takie jak Bemowo czy Bielany prezentują zróżnicowanie cen, co może być rezultatem lokalnych uwarunkowań, takich jak dostępność do centrów handlowych czy sieci komunikacji miejskiej, wpływających na poziom czynszów.
+
+##### **Warszawa prawobrzeżna**
+
+Wykres gęstości przedstawia rozkład średnich czynszów w poszczególnych osiedlach Warszawy prawobrzeżnej, z podziałem na dzielnice. Oś X ukazuje średni czynsz, a oś Y prezentuje gęstość rozkładu, odzwierciedlając różne wartości średnich czynszów w poszczególnych obszarach.
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+czynsz_dzielnica_p <- czynsz_dzielnica %>%
+  select(Dzielnica, Osiedle, Czynsz, Polozenie_wzgledem_Wisly) %>%
+  filter(!is.na(Dzielnica)) %>%
+  filter(!is.na(Czynsz)) %>%
+  group_by(Dzielnica, Osiedle) %>%
+  mutate(
+    Dzielnica = factor(Dzielnica),
+    Czynsz = as.numeric(str_extract(str_replace_all(Czynsz, "\\s", ""), "\\d+"))
+  ) %>%
+  filter(Polozenie_wzgledem_Wisly == "prawobrzeżna") %>%
+  filter(Czynsz < 2300) %>%
+  filter(Czynsz > 100) %>%
+  group_by(Dzielnica, Osiedle) %>%
+  summarize(mean_czynsz = mean(Czynsz, na.rm = TRUE))
+view(czynsz_dzielnica_p)
+
+# Znajdź maksymalną wartość Czynsz
+max_czynsz <- max(czynsz_dzielnica_p$mean_czynsz)
+
+# Stworzenie mapy z użyciem geom_density_ridges
+ggplot(czynsz_dzielnica_p, aes(x = mean_czynsz, y = Dzielnica, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis(name = "Średni czynsz w zł", option = "F", aesthetics = "fill") +
+  labs(title = 'Wykres średniego czynszu w zależności od dzielnicy') +
+  theme_minimal() +
+  xlab("Średni czynsz w zł")+
+  theme(
+    legend.position = "right",
+    panel.spacing = unit(0.5, "lines"),  # Zwiększenie odległości między mini-wykresami
+    strip.text.x = element_text(size = 8),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 15)
+  ) +
+  scale_x_continuous(limits = c(0, max_czynsz), breaks = seq(0, max_czynsz, by = 100), labels = scales::comma)
+```
+
+##### **Wnioski**
+
+1.  **Zróżnicowane ceny w Białołęce:** Dzielnica Białołęka prezentuje zróżnicowane średnie czynsze na poszczególnych osiedlach, co może wynikać z lokalnych uwarunkowań, takich jak lokalizacja czy standard osiedli.
+2.  **Wysokie czynsze w Gocławiu i Starej Pradze:** Osiedla w dzielnicach Praga-Południe i Praga-Północ prezentują wyższe średnie czynsze, co może być związane z centralną lokalizacją i dostępem do atrakcji miejskich.
+3.  **Zróżnicowanie w Wawrze:** Dzielnica Wawer prezentuje zróżnicowane ceny na poszczególnych osiedlach, co może wynikać z różnic w lokalizacji oraz dostępności do infrastruktury.
+
+##### **Interpretacje**
+
+1.  **Lokalne uwarunkowania w Białołęce:** Białołęka charakteryzuje się zróżnicowanymi cenami czynszów na poszczególnych osiedlach, co może być efektem różnic w standardzie i lokalizacji.
+2.  **Centralna lokalizacja a koszty mieszkań:** Osiedla w Pradze-Południe, Pradze-Północ i Gocławiu prezentują wyższe średnie czynsze, co może wynikać z centralnej lokalizacji i dostępu do usług oraz infrastruktury.
+3.  **Zróżnicowanie cen w Wawrze:** Dzielnica Wawer wykazuje zróżnicowanie cen czynszów, co może być rezultatem różnic w lokalizacji konkretnych osiedli w obrębie tej dzielnicy. Osiedla blisko atrakcji czy z dostępem do komunikacji publicznej mogą cechować się wyższymi czynszami.
+
+------------------------------------------------------------------------
+
+#### **Wykres korelacji zmiennych numerycznych**
+
+Wykres korelacji prezentuje zależności między różnymi zmiennymi numerycznymi w analizowanych danych dotyczących nieruchomości. Kolor czerwony oznacza silną dodatnią korelację, bliżej 1, natomiast kolor niebieski reprezentuje silną ujemną korelację, bliżej -1. Im bardziej wartość korelacji zbliża się do 0, tym intensywność koloru jest słabsza.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+cor_n <- OtoDom_Warszawa %>% 
+  mutate(
+    Czynsz = as.numeric(str_extract(str_replace_all(Czynsz, "\\s", ""), "\\d+"))
+  ) %>% 
+  filter(
+    !is.na(Cena) & 
+    !is.na(Cena_za_metr) & 
+    !is.na(Czynsz) & 
+    !is.na(Liczba_pokoi) & 
+    !is.na(Powierzchnia) & 
+    !is.na(Rok_budowy)
+  )
+
+num_vars <- select_if(cor_n, is.numeric)
+
+# Stwórz wykres korelacji z kwadratem
+ggcorr(num_vars, label = TRUE, label_size = 3, label_round = 2) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8),
+        aspect.ratio = 1,
+        plot.title = element_text(hjust = 0.5, size = 15)) +  # Dodaj aspect ratio
+  labs(title = "Wykres korelacji")
+
+
+```
+
+##### **Wnioski**
+
+1.  **Powiązanie czynszu z powierzchnią i liczbą pokoi:** Istnieje silna dodatnia korelacja między czynszem a powierzchnią (0.76) oraz liczbą pokoi (0.53). Wartości czynszu rosną wraz z zwiększeniem zarówno powierzchni, jak i liczby pokoi.
+2.  **Wpływ roku budowy na czynsz i cenę:** Korelacja między rokiem budowy a czynszem (0.03) czy ceną (0.04) jest niewielka, co sugeruje, że rok budowy nie ma znaczącego wpływu na te wartości.
+3.  **Relacja pomiędzy ceną za metr a pozostałymi zmiennymi:** Cena za metr ma niewielką korelację z rokiem budowy (-0.1), powierzchnią (0.02), liczbą pokoi (-0.15) i ceną (0.5).
+
+##### **Interpretacje**
+
+1.  **Wpływ cech nieruchomości na czynsz:** Wysoka dodatnia korelacja między czynszem, a powierzchnią i liczbą pokoi wskazuje, że te cechy mają istotny wpływ na wysokość czynszu. Nieruchomości o większej powierzchni lub większej liczbie pokoi zazwyczaj posiadają wyższy czynsz.
+2.  **Ograniczony wpływ roku budowy:** Brak silnej korelacji między rokiem budowy a czynszem czy ceną sugeruje, że ta cecha nie jest głównym czynnikiem wpływającym na te wartości.
+3.  **Cena za metr w kontekście innych zmiennych:** Cena za metr ma ograniczoną korelację z innymi zmiennymi, co sugeruje, że jej wartość może być bardziej niezależna od roku budowy, powierzchni, liczby pokoi czy ogólnej ceny nieruchomości.
+
+Podsumowując, analiza korelacji pomaga zrozumieć wzajemne relacje między zmiennymi numerycznymi, co może być istotne przy podejmowaniu decyzji związanych z nieruchomościami.
+
+------------------------------------------------------------------------
+
+#### **Posiadanie wind: Warszawa lewo- i prawobrzeżna**
+
+Wykres przedstawia podział posiadania windy w dzielnicach lewobrzeżnej i prawobrzeżnej Warszawy. Dwa oddzielne zestawienia obejmują informacje o posiadaniu windy w budynkach, z podziałem na "tak" i "nie".
+
+```{r, warning=FALSE, echo=FALSE}
+wisla_winda_l <- czynsz_dzielnica %>% 
+  select(Winda, Polozenie_wzgledem_Wisly) %>% 
+  filter(!is.na(Winda)) %>% 
+  filter(Polozenie_wzgledem_Wisly == "lewobrzeżna")
+
+wisla_winda_count_l <- wisla_winda_l %>% count(Winda)
+
+# Stwórz wykres kołowy z procentami i zmienionymi kolorami
+wisla_l <- ggplot(wisla_winda_count_l, aes(x = "", y = n, fill = Winda)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = scales::percent(n/sum(n))), position = position_stack(vjust = 0.5)) +
+  labs(
+    title = "Warszawa lewobrzeżna",
+    fill = "Winda"
+  ) +
+  scale_fill_brewer(palette = "Set2") +  # Użyj palety kolorów z biblioteki RColorBrewer
+  theme_void()  
+
+wisla_winda_p <- czynsz_dzielnica %>% 
+  select(Winda, Polozenie_wzgledem_Wisly) %>% 
+  filter(!is.na(Winda)) %>% 
+  filter(Polozenie_wzgledem_Wisly == "prawobrzeżna")
+
+wisla_winda_count_p <- wisla_winda_p %>% count(Winda)
+
+# Stwórz wykres kołowy z procentami i zmienionymi kolorami
+wisla_p <- ggplot(wisla_winda_count_p, aes(x = "", y = n, fill = Winda)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = scales::percent(n/sum(n))), position = position_stack(vjust = 0.5)) +
+  labs(
+    title = "Warszawa prawobrzeżna",
+    fill = "Winda"
+  ) +
+  scale_fill_brewer(palette = "Set2") +  # Użyj palety kolorów z biblioteki RColorBrewer
+  theme_void() 
+
+grid.arrange(wisla_l, wisla_p, ncol=2, top = "Podział posiadania windy w dzielnicach lewobrzeżnej i prawobrzeżnej Warszawy")
+```
+
+##### **Wnioski**
+
+1.  **Prawobrzeżna Warszawa:**
+    -   **Windę posiada 60% budynków:** W prawobrzeżnej części Warszawy około 60% budynków jest wyposażonych w windę.
+
+    -   **Niska liczba braku windy:** Tylko 40% budynków nie posiada windy, co sugeruje, że w tej części miasta windy są dość powszechne.
+2.  **Lewobrzeżna Warszawa:**
+    -   **Windę posiada 65% budynków:** W lewobrzeżnej części Warszawy 65% budynków jest wyposażonych w windę.
+    -   **Wyższa liczba budynków bez windy:** W porównaniu do prawobrzeżnej części, w lewobrzeżnej Warszawie istnieje więcej budynków (35%), które nie posiadają windy.
+
+##### **Interpretacje**
+
+1.  **Różnice między częściami miasta:** Obserwuje się pewne różnice w dostępie do wind w zależności od lokalizacji. Lewobrzeżna Warszawa wydaje się mieć nieco wyższy odsetek budynków z windą w porównaniu do prawobrzeżnej.
+2.  **Windy są powszechne:** W obu częściach miasta windy są dość powszechne, a większość budynków jest wyposażona w to udogodnienie.
+3.  **Potencjalne różnice w strukturze mieszkalnej:** Różnice w dostępie do windy mogą wynikać z różnic w strukturze mieszkalnej, lokalnych uwarunkowań czy inwestycjach deweloperskich w poszczególnych obszarach.
+
+------------------------------------------------------------------------
+
+#### Rodzaj ogrzewania w zależności od typu zabudowy i dzielnicy
+
+Wykres przedstawia zależność rodzaju ogrzewania od typu zabudowy w różnych dzielnicach Warszawy. Każdy punkt na wykresie reprezentuje konkretne połączenie dzielnicy, rodzaju ogrzewania i typu zabudowy.
+
+```{r, warning=FALSE, echo=FALSE}
+ogrzewanie_zabudowa <- OtoDom_Warszawa %>%
+  select(Dzielnica, Ogrzewanie, Rodzaj_zabudowy) %>% 
+  filter(!is.na(Ogrzewanie) & !is.na(Rodzaj_zabudowy) & !is.na(Dzielnica))
+view(ogrzewanie_zabudowa)
+
+ggplot(ogrzewanie_zabudowa, aes(x = Dzielnica, y = Rodzaj_zabudowy, color = Ogrzewanie)) +
+  geom_line() +
+  geom_point() +
+  labs(title = 'Rodzaj ogrzewania w zależności od typu zabudowy i dzielnicy',
+       x = 'Dzielnica', y = 'Rodzaj zabudowy') +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+
+```
+
+##### **Wnioski**
+
+1.  **Miejskie ogrzewanie dominuje:** W większości dzielnic Warszawy dominuje miejskie ogrzewanie, niezależnie od typu zabudowy.
+2.  **Blok vs. apartamentowiec:** W dzielnicach takich jak Ursynów, Bielany czy Białołęka, ogrzewanie miejskie jest powszechne zarówno w blokach, jak i apartamentowcach.
+3.  **Zróżnicowanie w Śródmieściu:** W Śródmieściu, szczególnie w kamienicach, występuje różnorodność w rodzajach ogrzewania - zarówno miejskie, jak i gazowe.
+4.  **Trendy w poszczególnych dzielnicach:** W niektórych dzielnicach, takich jak Mokotów czy Wola, dominuje ogrzewanie miejskie w apartamentowcach. Natomiast w Ursusie i Wesołej, bloki częściej korzystają z ogrzewania gazowego.
+5.  **Żoliborz - apartamentowce i bloki:** W dzielnicy Żoliborz zarówno bloki, jak i apartamentowce, korzystają głównie z ogrzewania miejskiego.
+
+##### **Interpretacje**
+
+1.  **Dominacja miejskiego ogrzewania:** Miejskie ogrzewanie jest powszechne w Warszawie, co może wynikać z dostępności sieci ciepłowniczych.
+2.  **Zróżnicowanie w Śródmieściu:** W centralnych dzielnicach, gdzie występują zarówno stare kamienice, jak i nowoczesne apartamentowce, różnice w wyborze rodzaju ogrzewania są bardziej widoczne.
+3.  **Trendy lokalne:** W niektórych dzielnicach istnieją lokalne preferencje, np. w Ursusie i Wesołej większe użycie ogrzewania gazowego, co może wynikać z lokalnej infrastruktury czy preferencji mieszkańców.
+
+------------------------------------------------------------------------
+
+#### **Rozkład ceny za metr kwadratowy w zależności od liczby pokoi**
+
+Na przedstawionym wykresie pudełkowym zaprezentowano rozkład cen za metr kwadratowy mieszkań w Warszawie w zależności od liczby pokoi. Dla każdej kategorii liczby pokoi (od 1 do 10) przedstawiono rozkład cen za metr, co pozwala zobaczyć, jak zmienia się cena w zależności od liczby pokoi.
+
+```{r, warning=FALSE, echo=FALSE}
+pokoje_cena_metr <- OtoDom_Warszawa %>% 
+  select(Liczba_pokoi, Cena_za_metr) %>% 
+  filter(!is.na(Liczba_pokoi)&!is.na(Cena_za_metr))
+view(pokoje_cena_metr)
+
+ggplot(pokoje_cena_metr, aes(x = Liczba_pokoi, y = Cena_za_metr/1000, fill = as.factor(Liczba_pokoi))) +
+  geom_boxplot() +
+  facet_wrap(~Liczba_pokoi, scales = 'free_y', ncol = 3) +
+  labs(title = 'Rozkład ceny za metr w zależności od liczby pokoi',
+       x = 'Liczba pokoi', y = 'Cena za metr w tys.') +
+  theme_minimal() +
+  theme(legend.title = element_blank(), 
+        legend.position = 'bottom',
+        plot.title = element_text(hjust = 0.5, size = 15))
+
+```
+
+##### **Wnioski**
+
+1.  **Wzrost ceny wraz z liczbą pokoi:** Ogólny trend wskazuje na to, że wraz z wzrostem liczby pokoi rośnie cena za metr kwadratowy mieszkania. Mieszkania o większej liczbie pokoi zazwyczaj są droższe.
+2.  **Zróżnicowanie cen w obrębie każdej kategorii:** Nawet w obrębie jednej kategorii liczby pokoi można zauważyć znaczne zróżnicowanie cen za metr kwadratowy. Oznacza to, że nie tylko liczba pokoi, ale także inne czynniki, takie jak lokalizacja czy standard mieszkania, wpływają na cenę za metr.
+3.  **Outliery:** W niektórych kategoriach liczby pokoi widoczne są wartości odstające (outliery), co sugeruje, że istnieją mieszkania o znacznie wyższych lub niższych cenach niż przeważająca większość mieszkań w danej kategorii.
+
+##### **Interpretacje**
+
+1.  **Lokalizacja jako kluczowy czynnik:** Wyraźne zróżnicowanie cen w obrębie każdej kategorii liczby pokoi podkreśla, że lokalizacja odgrywa kluczową rolę w kształtowaniu cen nieruchomości. Nawet mieszkania o tej samej liczbie pokoi mogą różnić się ceną w zależności od dzielnicy czy konkretnej lokalizacji.
+2.  **Elastyczność cenowa:** Obecność wartości odstających wskazuje na elastyczność cenową rynku nieruchomości. Istnieją mieszkania, które znacznie odbiegają ceną od przeciętnej w danej kategorii liczby pokoi, co może wynikać z różnych czynników, takich jak standard wykończenia czy unikalne cechy mieszkania.
+3.  **Ważność analizy rynku w kontekście preferencji:** Dla potencjalnych nabywców istotne jest zrozumienie, że cena za metr kwadratowy nie jest jedynym wyznacznikiem wartości mieszkania. Analiza rynku w kontekście preferencji dotyczących liczby pokoi oraz lokalizacji może pomóc w dokładniejszym dostosowaniu oferty do oczekiwań kupującego.
+
+Wykres dostarcza cennych informacji dla osób poszukujących nieruchomości, pomagając zrozumieć, jak różne czynniki wpływają na cenę mieszkań. Decyzja zakupowa powinna być oparta nie tylko na liczbie pokoi, ale również na analizie lokalizacji i innych istotnych kryteriów.
+
+------------------------------------------------------------------------
+
+#### **Rozkład liczby ofert w zależności od piętra**
+
+Wykres przedstawia dostępność mieszkań na poszczególnych piętrach, z uwzględnieniem liczby ofert. Dla każdego piętra przedstawiona jest liczba dostępnych mieszkań.
+
+```{r,warning=FALSE, echo=FALSE}
+pietra <- OtoDom_Warszawa
+pietra$Piętro <- str_extract(pietra$Piętro, ".*(?=/)")
+
+pietra <- pietra %>% 
+  select(Piętro) %>% 
+  filter(!is.na(Piętro))
+
+pietra$Piętro <- factor(pietra$Piętro, levels = c("parter", as.character(1:10)))
+
+pietra <- pietra %>% 
+  filter(!is.na(Piętro))
+view(pietra)
+
+# Tworzenie histogramu
+ggplot(pietra, aes(x = Piętro, fill = Piętro)) +
+  geom_bar() +
+  labs(title = 'Rozkład pięter', x = 'Piętro', y = 'Liczba ofert') +
+  theme_minimal() +
+  scale_y_continuous(breaks = seq(0, 2000, by = 250)) +
+  theme(
+    strip.text.x = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 15)
+  )
+  
+```
+
+##### **Wnioski**
+
+1.  **Zróżnicowana dostępność:**
+    -   Istnieje znaczna różnorodność dostępności mieszkań na różnych piętrach.
+
+    -   Mieszkania na parterze są najczęściej dostępne, co może wynikać z mniejszej konkurencji wśród ofert na to piętro.
+
+<!-- -->
+
+2.  **Mniejsza dostępność na wyższych piętrach:**
+    -   Dostępność mieszkań maleje wraz z numeracją pięter, co jest zgodne z oczekiwanym trendem, gdzie mieszkania na wyższych piętrach są rzadziej oferowane.
+3.  **Wysoka konkurencja o mieszkania na parterze:**
+    -   Mieszkania na parterze mogą cieszyć się dużym zainteresowaniem ze strony potencjalnych nabywców, co sprawia, że są one szybko podejmowane.
+
+##### **Interpretacje**
+
+1.  **Popularność mieszkań na parterze:**
+    -   Mieszkania na parterze są najbardziej dostępne, co może wynikać z ich większej atrakcyjności dla potencjalnych klientów.
+
+    -   Konieczność korzystania z windy może być decydującym czynnikiem przy wyborze mieszkania.
+
+<!-- -->
+
+2.  **Preferencje nabywców:**
+    -   Mieszkania na niższych piętrach cieszą się większym zainteresowaniem, co może wpływać na ich cenę na rynku wtórnym.
+    -   Wyższe piętra mogą być bardziej atrakcyjne dla osób poszukujących ciszy i widoków.
+
+------------------------------------------------------------------------
+
+#### **Rozkład posiadania balkonów, ogródków i tarasów w dzielnicach Warszawy**
+
+Wykres przedstawia rozkład posiadania balkonów, ogródków i tarasów w różnych dzielnicach. Dla każdej dzielnicy podano, czy mieszkania posiadają balkon, ogródek, taras, bądź różne kombinacje tych elementów.
+
+```{r, warning=FALSE, echo=FALSE}
+balkony <- OtoDom_Warszawa %>% 
+  select(Dzielnica, Balkon_taras_ogródek) %>% 
+  filter(!is.na(Balkon_taras_ogródek)) %>% 
+  filter(!is.na(Dzielnica))
+
+ggplot(balkony, aes(x = Dzielnica, fill = Balkon_taras_ogródek)) +
+  geom_bar(position = "stack", width = 0.7) +
+  labs(title = 'Rozkład posiadania balkonów, ogródków i tarasów w dzielnicach', x = 'Dzielnica', y = 'Liczba ofert') +
+  theme_minimal()+
+  theme(
+    strip.text.x = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 13),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
+  )
+```
+
+##### **Wnioski**
+
+1.  **Zróżnicowanie dostępności przestrzeni zewnętrznej:**
+    -   Istnieje zróżnicowanie w posiadaniu balkonów, ogródków i tarasów między różnymi dzielnicami.
+
+    -   Niektóre dzielnice charakteryzują się większą różnorodnością dostępności przestrzeni zewnętrznej.
+
+<!-- -->
+
+2.  **Popularność balkonów:**
+    -   Balkony są powszechnie spotykane w różnych dzielnicach, co sugeruje, że są one standardowym elementem mieszkań.
+3.  **Rzadkość tarasów i ogródków:**
+    -   Tarasy i ogródki są mniej powszechne niż balkony, co może wynikać z ograniczonej przestrzeni dostępnej dla tego rodzaju elementów.
+
+##### **Interpretacje**
+
+1.  **Preferencje mieszkańców:**
+    -   Mieszkania z balkonami są powszechne, co może wynikać z potrzeby dostępu do przestrzeni na świeżym powietrzu.
+
+    -   Ogródki i tarasy są mniej powszechne, ale w niektórych dzielnicach ich popularność może wzrastać.
+
+<!-- -->
+
+2.  **Różnorodność ofert:**
+    -   Dzielnicę Wilanów cechuje posiadanie tarasów i balkonów, co może wynikać z atrakcyjnej lokalizacji i zielonych terenów w okolicy.
+    -   Dzielnica Ursus ma tendencję do posiadania balkonów, ale ogródki są rzadziej spotykane.
+3.  **Wpływ lokalizacji na dostępność przestrzeni zewnętrznej:**
+    -   Lokalizacja w centrum, tak jak dzielnica Śródmieście, może wpływać na mniejszą dostępność przestrzeni zewnętrznej, co jest widoczne w mniejszej ilości tarasów i ogródków.
+    -   Dzielnice zielone, takie jak Wesoła, mogą charakteryzować się większą ilością ofert z ogródkami.
+
+------------------------------------------------------------------------
+
+#### **Rozkład rynku nieruchomości z podziałem na typ zabudowy**
+
+Wykres przedstawia rozkład rynku nieruchomości z podziałem na trzy różne typy zabudowy: apartamentowce, bloki i kamienice. Dla każdego typu zabudowy uwzględniono rynek pierwotny i wtórny. Kolor fioletowy oznacza rynek wtórny, a niebieski rynek pierwotny.
+
+```{r, echo=FALSE, warning=FALSE}
+rynek_a <- OtoDom_Warszawa %>% 
+  select(Rodzaj_zabudowy, Rynek) %>% 
+  filter(!is.na(Rodzaj_zabudowy)&!is.na(Rynek)) %>% 
+  filter(Rodzaj_zabudowy == "apartamentowiec")
+
+ ryn_a <- ggplot(rynek_a, aes(x = "", fill = Rynek)) +
+  geom_bar(width = 1) +
+  coord_polar("y") +
+  labs(title = 'Apartamentowiec', fill = 'Rynek') +
+  scale_fill_manual(values = c("pierwotny" = "lightblue", "wtórny" = "purple")) +  # Dostosowanie kolorów
+  theme_minimal() +
+  theme(   # Usunięcie etykiet na osi Y
+        axis.title = element_blank(),   # Usunięcie tytułu osi Y
+        axis.ticks = element_blank())   # Usunięcie kresek na osi Y
+ 
+ rynek_b <- OtoDom_Warszawa %>% 
+  select(Rodzaj_zabudowy, Rynek) %>% 
+  filter(!is.na(Rodzaj_zabudowy)&!is.na(Rynek)) %>% 
+  filter(Rodzaj_zabudowy == "blok")
+ 
+ ryn_b <- ggplot(rynek_b, aes(x = "", fill = Rynek)) +
+  geom_bar(width = 1) +
+  coord_polar("y") +
+  labs(title = 'Blok', fill = 'Rynek') +
+  scale_fill_manual(values = c("pierwotny" = "lightblue", "wtórny" = "purple")) +  # Dostosowanie kolorów
+  theme_minimal() +
+  theme(   # Usunięcie etykiet na osi Y
+        axis.title = element_blank(),   # Usunięcie tytułu osi Y
+        axis.ticks = element_blank())   # Usunięcie kresek na osi Y
+ 
+ rynek_c <- OtoDom_Warszawa %>% 
+  select(Rodzaj_zabudowy, Rynek) %>% 
+  filter(!is.na(Rodzaj_zabudowy)&!is.na(Rynek)) %>% 
+  filter(Rodzaj_zabudowy == "kamienica")
+ 
+ ryn_c <- ggplot(rynek_c, aes(x = "", fill = Rynek)) +
+  geom_bar(width = 1) +
+  coord_polar("y") +
+  labs(title = 'Kamienica', fill = 'Rynek') +
+  scale_fill_manual(values = c("pierwotny" = "lightblue", "wtórny" = "purple")) +  # Dostosowanie kolorów
+  theme_minimal() +
+  theme(   # Usunięcie etykiet na osi Y
+        axis.title = element_blank(),   # Usunięcie tytułu osi Y
+        axis.ticks = element_blank())   # Usunięcie kresek na osi Y
+ 
+ grid.arrange(ryn_a, ryn_b, ryn_c, nrow=3, top = "Rozkład rynku nieruchomości z podziałem na typ zabudowy")
+```
+
+##### **Interpretacje**
+
+1\. Apartamentowce:
+
+-   W analizowanym zbiorze danych znajduje się łącznie 1,678 apartamentowców.
+-   Rynek wtórny jest bardziej aktywny niż pierwotny dla apartamentowców.
+-   Widać pewną zmienność, ale ogólnie rynek wtórny dominuje w liczbie transakcji.
+
+2\. Bloki:
+
+-   Bloki stanowią największą grupę nieruchomości, z 2,814 obiektami.
+-   Rynek wtórny jest znacznie bardziej zdominowany niż rynek pierwotny dla tego typu zabudowy.
+-   Można zauważyć, że bloki są bardziej popularne na rynku wtórnym.
+
+3\. Kamienice:
+
+-   Kamienice są najrzadszym typem nieruchomości w analizie, zaledwie 642 obiekty.
+-   Rynek wtórny wydaje się być bardziej aktywny niż rynek pierwotny, ale różnica nie jest tak wyraźna jak w przypadku apartamentowców i bloków.
+-   Pomimo mniejszej liczby kamienic, rynek ten może być bardziej zróżnicowany pod względem rodzaju transakcji.
+
+##### **Wnioski**
+
+Analizując dane rynku nieruchomości z podziałem na typ zabudowy, można zauważyć, że każdy rodzaj posiada swoje unikalne cechy. Apartamentowce są liczne, a rynek wtórny jest bardziej aktywny. Bloki stanowią największą grupę, a rynek wtórny dominuje. Kamienice są najrzadsze, ale rynek wtórny może mieć większą zróżnicowaną ofertę. Ważne jest monitorowanie tych trendów dla lepszego zrozumienia dynamiki rynku nieruchomości.
+
+------------------------------------------------------------------------
+
+#### **Zależność ceny za metr kwadratowy od typu ogłoszeniodawcy i dzielnicy**
+
+Wykres przedstawia zależność ceny za metr kwadratowy nieruchomości od typu ogłoszeniodawcy i dzielnicy. Dane zawierają informacje o typie ogłoszeniodawcy (prywatny, biuro nieruchomości, deweloper) oraz dzielnicy, w której znajduje się nieruchomość. Cena za metr kwadratowy została również uwzględniona w analizie. Na osi X znajduje się typ ogłoszeniodawcy, natomiast na osi Y cena za metr kwadratowy. Dodatkowo, różne kolory na wykresie reprezentują różne dzielnice.
+
+```{r, warning=FALSE, echo=FALSE}
+ogloszeniodawca <- OtoDom_Warszawa %>%
+  select(Typ_ogłoszeniodawcy, Dzielnica, Cena_za_metr) %>%
+  filter(!is.na(Typ_ogłoszeniodawcy) & !is.na(Dzielnica) & !is.na(Cena_za_metr))
+
+ggplot(ogloszeniodawca, aes(x = Typ_ogłoszeniodawcy, y = Cena_za_metr/1000, fill = Dzielnica)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_viridis(discrete = TRUE) +
+  theme_ipsum() +
+  ggtitle("Zależność ceny za metr kwadratowy od typu ogłoszeniodawcy i dzielnicy") +
+  labs(x = "Typ ogłoszeniodawcy", y = "Cena za metr kwadratowy w tys.") +
+  theme(legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, size = 11))
+```
+
+##### **Wnioski**
+
+1.  **Prywatni ogłoszeniodawcy a biura nieruchomości:**
+    -   Ogłoszenia prywatne często mają wyższe ceny za metr kwadratowy w porównaniu do biur nieruchomości.
+    -   Biura nieruchomości prezentują zróżnicowany zakres cen, a niektóre z nich oferują nieruchomości w niższych cenach niż prywatni ogłoszeniodawcy.
+2.  **Zróżnicowanie cen w zależności od dzielnicy:**
+    -   Dzielnice takie jak Śródmieście, Wilanów, Mokotów i Wola często mają wyższe ceny za metr kwadratowy, niezależnie od typu ogłoszeniodawcy.
+    -   Dzielnice Ursus, Bemowo i Włochy często prezentują niższe ceny za metr kwadratowy.
+3.  **Deweloperzy:**
+    -   Ceny ofert deweloperów wydają się być zróżnicowane.
+
+##### **Interpretacje**
+
+1.  **Wysokie ceny w centrum:**
+    -   Nieruchomości znajdujące się w centrum miasta (Śródmieście) często są droższe, co może wynikać z atrakcyjnej lokalizacji i dostępu do różnych udogodnień.
+2.  **Różnice między dzielnicami:**
+    -   Istnieje znaczne zróżnicowanie cen w zależności od dzielnicy, co może wynikać z różnic w standardzie życia, dostępności do terenów zielonych czy infrastruktury.
+
+Analiza wykresu może pomóc w zidentyfikowaniu trendów na rynku nieruchomości, co może być przydatne zarówno dla kupujących, jak i sprzedających.
+
+------------------------------------------------------------------------
+
+### **4. Podsumowanie**
+
+Warszawski rynek nieruchomości charakteryzuje się zróżnicowanymi cenami i czynszami, zależnymi głównie od lokalizacji, rozmiaru i standardu mieszkania. Dzielnice takie jak Mokotów, zwłaszcza osiedla "Sielce," "Czerniaków," i "Wierzbno," cechują się wyższymi cenami. Czynsze w Śródmieściu są różnorodne, a analiza pokazuje, że metraż i liczba pokoi wpływają istotnie na ich wysokość. Rok budowy ma mniejsze znaczenie. Istnieją niewielkie różnice między lewobrzeżną a prawobrzeżną Warszawą. Podsumowując, wybór nieruchomości powinien uwzględniać lokalizację, rozmiar i standard, a analiza rynku dostarcza istotnych informacji dla potencjalnych nabywców czy najemców.
+
+------------------------------------------------------------------------
